@@ -17,6 +17,7 @@ Ivanov — узнать телефон абонента по фамилии
 #include <fstream>
 #include <string>
 #include <regex>
+#include <vector>
 
 namespace constants {
     const std::string P_TEL = "^\\d{2}-\\d{2}-\\d{2}$";
@@ -26,8 +27,11 @@ namespace constants {
     const std::string PATH = "telDir.txt";
 }
 
+using t_map = std::map <std::string, std::string>;
+using n_map = std::map <std::string, std::vector<std::string>>;
+
 //Функция загрузки словаря
-void loadTel(std::map <std::string, std::string>& tel_dir) {
+void loadTel(t_map& tel_dir, n_map& name_dir) {
     std::ifstream ifs(constants::PATH);
     if (!ifs.is_open()) {
         std::cout << "I can't open the file\n";
@@ -37,11 +41,22 @@ void loadTel(std::map <std::string, std::string>& tel_dir) {
         int size;
         std::string name;
         std::string tel;
+        n_map::iterator it_name;
         ifs >> size;
         for (int i = 0; i < size; i++) {
             ifs >> tel;
             ifs >> name;
             tel_dir[tel] = name;
+            std::vector<std::string> tmp;
+            it_name = name_dir.find(name);
+            if (it_name == name_dir.end()) {
+                
+                tmp.push_back(tel);
+                name_dir.emplace(name, tmp);
+            }
+            else {                
+                it_name->second.push_back(tel);
+            }
         }
     }
     ifs.close();
@@ -80,9 +95,9 @@ int validInput(const std::string& str) {
 }
 
 //Функция выбора по номеру телефона
-std::string searchNumTel(std::map <std::string, std::string>& tel_dir, std::string str) { 
+std::string searchNumTel(t_map& tel_dir, std::string str) {
 
-    std::map <std::string, std::string>::iterator it = tel_dir.find(str);
+    t_map::iterator it = tel_dir.find(str);
     if (it != tel_dir.end())         
         return it->first + " - " + it->second;    
     else
@@ -90,57 +105,74 @@ std::string searchNumTel(std::map <std::string, std::string>& tel_dir, std::stri
 }
 
 //Функция выбора по фамилии абонента
-std::map <std::string, std::string> searchName(std::map <std::string, std::string>& tel_dir, std::string str) {
-    std::map <std::string, std::string> tmp;
-    for (std::map <std::string, std::string>::iterator it = tel_dir.begin(); it != tel_dir.end(); it++) {
-        if (it->second == str) {
-            std::pair <std::string, std::string> cur(it->first, it->second);
-            tmp.insert(cur);
-        }            
+std::vector<std::string> searchName(n_map& name_dir, std::string str, bool& search_name) {
+    std::vector<std::string> tmp;
+    n_map::iterator it = name_dir.find(str);
+    if (it == name_dir.end())
+        return tmp;
+    else {
+        for (int i = 0; i < it->second.size(); i++) {
+            tmp.push_back(it->second[i]);
+        }
+        search_name = true;
+        return tmp;
     }
-    return tmp;
+    
 }
 
 //Функция добавления абонента в справочник
-void addTel(std::map <std::string, std::string>& tel_dir, std::string str) {
+void addTel(t_map& tel_dir, n_map& name_dir, std::string str) {
     std::regex p_tel_name(constants::PARS_STRING);
     std::cmatch result;
     std::regex_match(str.c_str(), result, p_tel_name);
     if (tel_dir.find(result[1]) == tel_dir.end()) {
         std::pair <std::string, std::string> el_tel_dir(result[1], result[3]);        
         tel_dir.insert(el_tel_dir);
-    }
+    }    
     else
-        std::cout << "The number already exists!\n";    
+        std::cout << "The number already exists!\n";
+    n_map::iterator it_name = name_dir.find(result[3]);
+    std::vector<std::string> tmp;
+    if (it_name == name_dir.end()) {        
+        tmp.push_back(result[1]);
+        name_dir.emplace(result[3], tmp);
+    }
+    else {
+        tmp.push_back(result[1]);
+        it_name->second = tmp;
+    }        
 }
 
 //Выбор действия
-void chosAction(int comand, std::map <std::string, std::string>& tel_dir, std::string str) {
+void chosAction(int comand, t_map& tel_dir, n_map name_dir, std::string str) {
+    std::vector<std::string> tmp;
+    bool search_name{ false };
     switch (comand)
     {
     case 0:
         std::cout << searchNumTel(tel_dir, str);
         break;
-    case 1:
-        if (searchName(tel_dir, str).size() != 0) {
-            for (auto p : searchName(tel_dir, str))
-                std::cout << p.second << " - " << p.first << std::endl;
+    case 1:        
+        tmp = searchName(name_dir, str, search_name);
+        if (search_name) {
+            std::cout << str << std::endl;
+            for (auto p : tmp)
+                std::cout << p << std::endl;
         }
         else
             std::cout << "There is no subscriber with the last name " << str;
         break;
     case 2:
-        addTel(tel_dir, str);
+        addTel(tel_dir, name_dir, str);
         saveTel(tel_dir);
-        break;
-    default:
-        break;
+        break;    
     }
 }
 
 void startTelDir() {
-    std::map <std::string, std::string> tel_dir;
-    loadTel(tel_dir);
+    t_map tel_dir;
+    n_map name_dir;
+    loadTel(tel_dir, name_dir);
 
     std::string str;
     std::cout << "Enter the information to enter or search through the dictionary ";
@@ -151,7 +183,7 @@ void startTelDir() {
         std::getline(std::cin, str);
         comand = validInput(str);
     }
-    chosAction(comand, tel_dir, str);
+    chosAction(comand, tel_dir, name_dir, str);
 }
 
 int main()
